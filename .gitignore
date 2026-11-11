@@ -1,0 +1,36 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+*.so
+
+# ===== 环境与密钥（绝不提交）=====
+.env
+.env.*
+!.env.example
+
+# ===== 测试与缓存 =====
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ===== 日志 =====
+*.log
+
+# ===== IDE / 系统 =====
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ===== 本地数据 =====
+data/
+*.sqlite3

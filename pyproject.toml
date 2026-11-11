@@ -1,0 +1,15 @@
+[project]
+name = "toolrag"
+version = "0.1.0"
+description = "智能数据查询与文档助手 Agent（Function Calling + RAG 混合检索）"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
