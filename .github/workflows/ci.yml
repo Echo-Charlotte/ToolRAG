@@ -9,6 +9,30 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: toolrag
+          POSTGRES_PASSWORD: toolrag
+          POSTGRES_DB: toolrag
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U toolrag"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: toolrag
+      POSTGRES_PASSWORD: toolrag
+      POSTGRES_DB: toolrag
+      EMBEDDING_API_KEY: dummy-key-for-ci
+
     steps:
       - uses: actions/checkout@v4
 

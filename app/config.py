@@ -19,11 +19,22 @@ class Settings(BaseSettings):
     app_port: int = 8000
     log_level: str = "INFO"
 
-    # LLM
+    # LLM（对话模型，M3 使用）
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     chat_model: str = "gpt-4o-mini"
-    embedding_model: str = "text-embedding-3-small"
+
+    # Embedding（默认硅基流动，OpenAI 兼容接口）
+    embedding_api_key: str = ""
+    embedding_base_url: str = "https://api.siliconflow.cn/v1"
+    embedding_model: str = "BAAI/bge-m3"
+    embedding_dim: int = 1024
+    embedding_batch_size: int = 32
+
+    # RAG 检索参数
+    chunk_size: int = 500
+    chunk_overlap: int = 50
+    retrieval_top_k: int = 5
 
     # PostgreSQL + PGVector
     postgres_host: str = "localhost"
