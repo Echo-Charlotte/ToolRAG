@@ -9,8 +9,9 @@ from app.api.schemas import (
     SearchRequest,
     SearchResponse,
 )
+from app.config import settings
 from app.rag.ingest import ingest_text
-from app.rag.retriever import search_similar
+from app.rag.retriever import search as run_search
 
 router = APIRouter()
 
@@ -32,14 +33,20 @@ def create_document(req: IngestRequest) -> IngestResponse:
     return IngestResponse(source=req.source, chunks=count)
 
 
-@router.post("/search", response_model=SearchResponse, summary="向量相似度检索")
+@router.post("/search", response_model=SearchResponse, summary="检索（向量 / 关键词 / 混合）")
 def search(req: SearchRequest) -> SearchResponse:
-    """按余弦相似度检索最相关的 chunk。"""
+    """按 mode 选择检索方式，默认走配置 search_mode（默认 hybrid）。"""
+    mode = req.mode or settings.search_mode
     try:
-        raw_hits = search_similar(req.query, req.top_k)
+        raw_hits = run_search(req.query, req.top_k, mode, req.fusion, req.alpha)
+    except ValueError as exc:  # 非法 mode
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"检索失败: {exc}") from exc
+    fusion = (req.fusion or settings.fusion_strategy) if mode == "hybrid" else None
     return SearchResponse(
         query=req.query,
+        mode=mode,
+        fusion=fusion,
         hits=[SearchHit(**hit) for hit in raw_hits],
     )

@@ -2,13 +2,14 @@
 
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, func
 
 from app.config import settings
 from app.db import get_session
 from app.models import Document
 from app.rag.chunking import split_text
 from app.rag.embeddings import get_embedding_client
+from app.rag.tokenizer import to_index_text
 
 
 def ingest_text(source: str, text: str, metadata: dict[str, Any] | None = None) -> int:
@@ -42,6 +43,7 @@ def ingest_text(source: str, text: str, metadata: dict[str, Any] | None = None) 
                     chunk_index=index,
                     content=chunk,
                     embedding=vector,
+                    content_tsv=func.to_tsvector("simple", to_index_text(chunk)),
                     doc_metadata=meta,
                 )
                 for index, (chunk, vector) in enumerate(zip(chunks, vectors))

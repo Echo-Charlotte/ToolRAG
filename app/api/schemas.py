@@ -21,10 +21,19 @@ class IngestResponse(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    """向量检索请求。"""
+    """检索请求。"""
 
     query: str = Field(..., min_length=1, description="查询文本")
     top_k: int | None = Field(default=None, ge=1, le=50, description="返回条数，默认取配置值")
+    mode: str | None = Field(
+        default=None, description="检索模式：vector | keyword | hybrid，默认取配置"
+    )
+    fusion: str | None = Field(
+        default=None, description="混合检索的融合策略：rrf | weighted，默认取配置"
+    )
+    alpha: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="加权融合中向量分的权重，默认取配置"
+    )
 
 
 class SearchHit(BaseModel):
@@ -34,12 +43,16 @@ class SearchHit(BaseModel):
     source: str
     chunk_index: int
     content: str
-    score: float = Field(..., description="余弦相似度，越接近 1 越相关")
+    score: float = Field(..., description="主排序分：向量=余弦相似度，关键词=ts_rank，混合=融合分")
     metadata: dict[str, Any] = Field(default_factory=dict)
+    vector_score: float | None = Field(default=None, description="加权融合时的原始向量分")
+    keyword_score: float | None = Field(default=None, description="加权融合时的原始关键词分")
 
 
 class SearchResponse(BaseModel):
-    """向量检索响应。"""
+    """检索响应。"""
 
     query: str
+    mode: str = Field(..., description="实际使用的检索模式")
+    fusion: str | None = Field(default=None, description="混合检索实际使用的融合策略")
     hits: list[SearchHit]

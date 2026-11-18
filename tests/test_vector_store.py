@@ -92,3 +92,40 @@ def test_reingest_same_source_overwrites(
     with get_session() as session:
         total = session.query(Document).filter(Document.source == source).count()
     assert total == 1
+
+
+def test_keyword_search_matches_chinese(
+    fake_embedding: _FakeEmbeddingClient, prepared_db: None, cleanup: None
+) -> None:
+    source = "test://keyword"
+    ingest_module.ingest_text(source, "数据库查询太慢可以做索引优化。", {"title": "数据库"})
+
+    hits = retriever_module.search_keyword("数据库索引", top_k=3)
+
+    assert source in {hit["source"] for hit in hits}
+    assert all(hit["score"] > 0 for hit in hits)
+
+
+def test_keyword_search_empty_query_returns_nothing(
+    fake_embedding: _FakeEmbeddingClient, prepared_db: None, cleanup: None
+) -> None:
+    ingest_module.ingest_text("test://keyword-empty", "任意内容。", {})
+    assert retriever_module.search_keyword("，。！", top_k=3) == []
+
+
+def test_hybrid_search_returns_hits_for_both_strategies(
+    fake_embedding: _FakeEmbeddingClient, prepared_db: None, cleanup: None
+) -> None:
+    source = "test://hybrid"
+    ingest_module.ingest_text(source, "苹果是一种水果。香蕉也是水果。", {"title": "水果"})
+
+    for fusion in ("rrf", "weighted"):
+        hits = retriever_module.search_hybrid("苹果", top_k=3, fusion=fusion)
+        assert source in {hit["source"] for hit in hits}
+
+
+def test_search_dispatch_invalid_mode_raises(
+    fake_embedding: _FakeEmbeddingClient, prepared_db: None, cleanup: None
+) -> None:
+    with pytest.raises(ValueError):
+        retriever_module.search("苹果", mode="bogus")

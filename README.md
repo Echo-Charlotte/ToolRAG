@@ -26,8 +26,10 @@ ToolRAG/
 │   └── rag/
 │       ├── chunking.py    # 文本切分
 │       ├── embeddings.py  # Embedding 客户端
-│       ├── ingest.py      # 文档入库
-│       └── retriever.py   # 向量检索
+│       ├── tokenizer.py   # 中文二元切分（bigram）
+│       ├── ingest.py      # 文档入库（含 content_tsv）
+│       ├── retriever.py   # 向量 / 关键词 / 混合检索
+│       └── fusion.py      # RRF 与加权融合排序
 ├── tests/                 # 测试
 ├── .github/workflows/     # CI
 ├── docker-compose.yml     # PGVector + Redis
@@ -63,16 +65,16 @@ pip install -r requirements-dev.txt
 uvicorn app.main:app --reload
 ```
 
-启动时会自动执行 `init_db()`：启用 `vector` 扩展、建表、建 HNSW 向量索引（幂等）。
+启动时会自动执行 `init_db()`：启用 `vector` 扩展、建表、建 HNSW 向量索引、建 `content_tsv` 的 GIN 索引，并回填历史数据的关键词索引（全部幂等）。
 打开 http://localhost:8000/docs 查看接口文档。
 
-## API 说明（M1）
+## API 说明（M2）
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查 |
-| POST | `/api/documents` | 文档入库：切分 → 向量化 → 写入 PGVector |
-| POST | `/api/search` | 向量相似度检索（余弦） |
+| POST | `/api/documents` | 文档入库：切分 → 向量化 → 写入 PGVector（同时生成 `content_tsv`） |
+| POST | `/api/search` | 检索：支持 `vector` / `keyword` / `hybrid` 三种模式 |
 
 ### 文档入库
 
@@ -90,33 +92,58 @@ curl -X POST http://localhost:8000/api/documents \
 
 同一 `source` 重复入库会覆盖旧数据。
 
-### 向量检索
+### 检索
+
+请求体可选字段：
+
+- `mode`：`vector`（余弦相似度）/ `keyword`（ts_rank 关键词）/ `hybrid`（两路融合），默认取配置 `SEARCH_MODE`（默认 `hybrid`）。
+- `fusion`：`hybrid` 模式下的融合策略，`rrf`（默认）或 `weighted`。
+- `alpha`：`weighted` 融合中向量分的权重（0~1，默认 0.5）。
+- `top_k`：返回条数。
 
 ```bash
+# 混合检索（默认）
 curl -X POST http://localhost:8000/api/search \
   -H "Content-Type: application/json" \
-  -d '{"query":"哪些水果富含钾？","top_k":3}'
+  -d '{"query":"哪些水果富含钾？","mode":"hybrid","fusion":"rrf","top_k":3}'
+
+# 纯关键词检索
+curl -X POST http://localhost:8000/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"香蕉 钾","mode":"keyword","top_k":3}'
 ```
 
-响应示例：
+响应示例（`weighted` 融合会额外返回 `vector_score` / `keyword_score`）：
 
 ```json
 {
   "query": "哪些水果富含钾？",
+  "mode": "hybrid",
+  "fusion": "rrf",
   "hits": [
     {
       "id": 2,
       "source": "fruits.md",
       "chunk_index": 0,
       "content": "苹果是一种常见水果。香蕉富含钾。",
-      "score": 0.7321,
-      "metadata": {"title": "水果"}
+      "score": 0.032787,
+      "metadata": {"title": "水果"},
+      "vector_score": null,
+      "keyword_score": null
     }
   ]
 }
 ```
 
-`score` 为余弦相似度（`1 - 余弦距离`），越接近 1 越相关。
+> `score` 的含义随模式变化：`vector` 为余弦相似度（越接近 1 越相关）；`keyword` 为 `ts_rank`；
+> `hybrid` 下 `rrf` 为 RRF 累加分（量级很小，仅用于排序），`weighted` 为归一化加权分（0~1）。
+
+### 中文关键词检索原理
+
+PostgreSQL 内置全文检索按空格切词，中文没有空格会被整句当成一个 token。
+因此入库前先用 **二元切分（bigram）** 把中文串切成 `数据 据库` 这样的片段，
+再经 `to_tsvector('simple', ...)` 建索引（GIN）；查询同理切成 bigram 后用 `|` 拼成 OR 的 tsquery，
+避免 AND 造成的零召回。
 
 ## 代码检查与测试
 
@@ -133,7 +160,7 @@ pytest -q
 | --- | --- | --- |
 | M0 | 项目初始化：骨架、Docker 环境、配置 | ✅ |
 | M1 | 向量检索：切分、Embedding、PGVector 存储与检索 | ✅ |
-| M2 | 关键词检索 + 混合检索 | ⬜ |
+| M2 | 关键词检索 + 混合检索 | ✅ |
 | M3 | Function Calling 多工具路由 | ⬜ |
 | M4 | 引用溯源 / 失败兜底 / Token Trace | ⬜ |
 | M5 | 评测与优化 | ⬜ |

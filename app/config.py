@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     chunk_overlap: int = 50
     retrieval_top_k: int = 5
 
+    # 混合检索（M2）
+    search_mode: str = "hybrid"  # vector | keyword | hybrid
+    fusion_strategy: str = "rrf"  # rrf | weighted
+    rrf_k: int = 60
+    hybrid_alpha: float = 0.5  # 加权融合中向量分的权重
+    candidate_multiplier: int = 4  # 混合检索时各路召回的候选池倍数
+
     # PostgreSQL + PGVector
     postgres_host: str = "localhost"
     postgres_port: int = 5432

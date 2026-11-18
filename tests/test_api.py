@@ -19,15 +19,58 @@ def test_search_endpoint_shape(monkeypatch: pytest.MonkeyPatch) -> None:
             "metadata": {"title": "水果"},
         }
     ]
-    monkeypatch.setattr("app.api.routes.search_similar", lambda query, top_k: fake_hits)
+    monkeypatch.setattr(
+        "app.api.routes.run_search", lambda query, top_k, mode, fusion, alpha: fake_hits
+    )
 
-    resp = client.post("/api/search", json={"query": "苹果", "top_k": 1})
+    resp = client.post("/api/search", json={"query": "苹果", "top_k": 1, "mode": "vector"})
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["query"] == "苹果"
+    assert body["mode"] == "vector"
     assert body["hits"][0]["source"] == "doc.md"
     assert body["hits"][0]["score"] == 0.87
+
+
+def test_search_hybrid_returns_fusion(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_hits = [
+        {
+            "id": 1,
+            "source": "doc.md",
+            "chunk_index": 0,
+            "content": "苹果是一种水果。",
+            "score": 0.5,
+            "metadata": {},
+            "vector_score": 0.8,
+            "keyword_score": 0.2,
+        }
+    ]
+    monkeypatch.setattr(
+        "app.api.routes.run_search", lambda query, top_k, mode, fusion, alpha: fake_hits
+    )
+
+    resp = client.post(
+        "/api/search", json={"query": "苹果", "mode": "hybrid", "fusion": "weighted"}
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["mode"] == "hybrid"
+    assert body["fusion"] == "weighted"
+    assert body["hits"][0]["vector_score"] == 0.8
+    assert body["hits"][0]["keyword_score"] == 0.2
+
+
+def test_search_rejects_invalid_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise(query: str, top_k: int | None, mode: str, fusion: str | None, alpha: float | None):
+        raise ValueError(f"未知检索模式: {mode}")
+
+    monkeypatch.setattr("app.api.routes.run_search", _raise)
+
+    resp = client.post("/api/search", json={"query": "苹果", "mode": "bogus"})
+
+    assert resp.status_code == 400
 
 
 def test_search_rejects_empty_query() -> None:
