@@ -1,0 +1,14 @@
+[
+  {"id": "q1", "question": "数据库查询变慢了可以怎么优化？", "expected_sources": ["db.md"], "keywords": ["索引"]},
+  {"id": "q2", "question": "GIN 索引适合什么场景？", "expected_sources": ["db.md"], "keywords": ["全文检索"]},
+  {"id": "q3", "question": "TCP 三次握手的过程是怎样的？", "expected_sources": ["net.md"], "keywords": ["三次握手", "SYN"]},
+  {"id": "q4", "question": "UDP 和 TCP 有什么区别？", "expected_sources": ["net.md"], "keywords": ["UDP", "可靠"]},
+  {"id": "q5", "question": "asyncio 是怎么实现并发的？", "expected_sources": ["py.md"], "keywords": ["事件循环", "协程"]},
+  {"id": "q6", "question": "GIL 对多线程有什么影响？", "expected_sources": ["py.md"], "keywords": ["GIL"]},
+  {"id": "q7", "question": "操作系统如何分配 CPU 资源？", "expected_sources": ["os.md"], "keywords": ["调度"]},
+  {"id": "q8", "question": "为什么进程切换会有开销？", "expected_sources": ["os.md"], "keywords": ["上下文"]},
+  {"id": "q9", "question": "Redis 如何设置键的过期时间？", "expected_sources": ["redis.md"], "keywords": ["过期", "TTL"]},
+  {"id": "q10", "question": "缓存雪崩怎么缓解？", "expected_sources": ["redis.md"], "keywords": ["缓存雪崩"]},
+  {"id": "q11", "question": "虚拟内存是怎么工作的？", "expected_sources": ["os.md"], "keywords": ["页表"]},
+  {"id": "q12", "question": "滑动窗口是做什么用的？", "expected_sources": ["net.md"], "keywords": ["滑动窗口"]}
+]

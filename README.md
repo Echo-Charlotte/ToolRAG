@@ -34,9 +34,16 @@ ToolRAG/
 │   ├── agent/             # Function Calling Agent
 │   │   ├── llm.py         # 对话模型客户端
 │   │   └── tool_agent.py  # 多轮工具调用循环
-│   └── tools/             # LLM 可调用的工具
-│       ├── registry.py    # 工具注册表（OpenAI tools schema）
-│       └── rag_tools.py   # 检索 / 列来源 / 读全文
+│   ├── tools/             # LLM 可调用的工具
+│   │   ├── registry.py    # 工具注册表（OpenAI tools schema）
+│   │   └── rag_tools.py   # 检索 / 列来源 / 读全文
+│   └── eval/              # 评测指标与评测集加载（M5）
+├── eval/                  # 评测集（M5）
+│   ├── corpus/            # 评测语料
+│   ├── qa.json            # 评测题（问题 / 应有来源 / 关键词）
+│   └── report.md          # 评测报告
+├── scripts/               # 辅助脚本
+│   └── evaluate.py        # 评测入口（M5）
 ├── tests/                 # 测试
 ├── .github/workflows/     # CI
 ├── docker-compose.yml     # PGVector + Redis
@@ -205,6 +212,25 @@ pytest -q
 
 `tests/test_vector_store.py` 需要可用的 PGVector；若本地未启动数据库会自动跳过。
 
+## 评测（M5）
+
+- 评测集：`eval/qa.json`（12 道题，覆盖数据库 / 网络 / Python / 操作系统 / Redis）；
+- 评测语料：`eval/corpus/*.md`（入库时以 `eval://` 为 source 前缀，可重复运行）。
+
+```bash
+PYTHONPATH=. python scripts/evaluate.py               # 检索 + Agent 问答
+PYTHONPATH=. python scripts/evaluate.py --skip-agent  # 只跑检索指标（不调用 LLM）
+```
+
+指标：
+
+- 检索：`Recall@k`、`Hit@k`、`MRR`、平均延迟；
+- 问答：答案准确率（关键词覆盖）、引用正确率、兜底率、平均轮数与延迟、Token 用量。
+
+结果写入 [eval/report.md](eval/report.md)。当前基线（`hybrid`，top_k=5）：
+Recall@5 = 1.00、Hit@5 = 1.00、MRR = 1.00、平均检索延迟约 153 ms；
+Agent 答案准确率 1.00、引用正确率 1.00、兜底率 0.00、平均问答延迟约 5.2 s。
+
 ## 里程碑
 
 | 阶段 | 内容 | 状态 |
@@ -214,4 +240,6 @@ pytest -q
 | M2 | 关键词检索 + 混合检索 | ✅ |
 | M3 | Function Calling 多工具路由 | ✅ |
 | M4 | 引用溯源 / 失败兜底 / Token Trace | ✅ |
-| M5 | 评测与优化 | ⬜ |
+| M5 | 评测：评测集、评测脚本与报告 | ✅ |
+| M6 | Redis 缓存与检索优化 | ⬜ |
+| M7 | Docker 镜像与部署文档 | ⬜ |
