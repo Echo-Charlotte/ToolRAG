@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 
 from app.db import get_session
 from app.models import Document
-from app.rag.retriever import search
+from app.rag.retriever import search_cached
 
 
 def search_documents(query: str, top_k: int = 5, mode: str = "hybrid") -> dict[str, Any]:
@@ -21,7 +21,7 @@ def search_documents(query: str, top_k: int = 5, mode: str = "hybrid") -> dict[s
         {"query", "mode", "results": [{source, chunk_index, content, score}]}
     """
     top_k = max(1, min(int(top_k), 20))
-    hits = search(query, top_k=top_k, mode=mode)
+    hits, _cached = search_cached(query, top_k=top_k, mode=mode)
     return {
         "query": query,
         "mode": mode,

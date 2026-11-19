@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db: int = 0
 
+    # 缓存（M6）
+    cache_enabled: bool = True  # 关闭后所有读写直接跳过 Redis
+    cache_ttl: int = 300  # 检索结果缓存有效期（秒）
+    cache_timeout: float = 0.5  # Redis 连接 / 读写超时（秒），避免阻塞主流程
+    cache_key_prefix: str = "toolrag"
+
     @property
     def effective_llm_api_key(self) -> str:
         """对话模型 API Key；未单独配置时复用 embedding 的 Key（同一硅基流动账号）。"""

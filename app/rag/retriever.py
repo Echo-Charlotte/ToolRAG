@@ -1,9 +1,11 @@
 """检索：向量检索、关键词检索与混合检索。"""
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from sqlalchemy import func, select
 
+from app.cache import cache_get_json, cache_set_json, search_cache_key
 from app.config import settings
 from app.db import get_session
 from app.models import Document
@@ -113,8 +115,12 @@ def search_hybrid(
     alpha = settings.hybrid_alpha if alpha is None else alpha
     pool = top_k * settings.candidate_multiplier
 
-    vector_hits = search_similar(query, pool)
-    keyword_hits = search_keyword(query, pool)
+    # 两路召回互不依赖，用线程池并行执行：向量路（含网络请求）与关键词路（DB 查询）同时进行。
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        vector_future = executor.submit(search_similar, query, pool)
+        keyword_future = executor.submit(search_keyword, query, pool)
+        vector_hits = vector_future.result()
+        keyword_hits = keyword_future.result()
 
     if fusion == "weighted":
         return weighted_fusion(vector_hits, keyword_hits, alpha=alpha, top_k=top_k)
@@ -149,3 +155,44 @@ def search(
     if mode == "hybrid":
         return search_hybrid(query, top_k, fusion, alpha)
     raise ValueError(f"未知检索模式: {mode}（可选 vector / keyword / hybrid）")
+
+
+def search_cached(
+    query: str,
+    top_k: int | None = None,
+    mode: str | None = None,
+    fusion: str | None = None,
+    alpha: float | None = None,
+) -> tuple[list[dict[str, Any]], bool]:
+    """带缓存的检索入口（M6）：命中缓存直接返回，否则检索并写回缓存。
+
+    缓存键包含 query / mode / top_k / fusion / alpha，不同参数互不干扰；
+    文档入库时会统一失效（见 `app.rag.ingest`），避免读到旧数据。
+
+    Returns:
+        (hits, cached)：`cached=True` 表示本次命中缓存、未真正查询数据库。
+
+    Raises:
+        ValueError: mode 非法。
+    """
+    mode = mode or settings.search_mode
+    if mode not in {"vector", "keyword", "hybrid"}:
+        raise ValueError(f"未知检索模式: {mode}（可选 vector / keyword / hybrid）")
+    top_k = top_k or settings.retrieval_top_k
+    if mode == "hybrid":
+        effective_fusion: str | None = fusion or settings.fusion_strategy
+        effective_alpha: float | None = settings.hybrid_alpha if alpha is None else alpha
+    else:
+        effective_fusion, effective_alpha = None, None
+
+    key = search_cache_key(query, mode, top_k, effective_fusion, effective_alpha)
+
+    if settings.cache_enabled:
+        cached_hits = cache_get_json(key)
+        if isinstance(cached_hits, list):
+            return cached_hits, True
+
+    hits = search(query, top_k=top_k, mode=mode, fusion=fusion, alpha=alpha)
+    if settings.cache_enabled:  # 失败兜底：Redis 异常时 cache_set_json 静默忽略
+        cache_set_json(key, hits, settings.cache_ttl)
+    return hits, False

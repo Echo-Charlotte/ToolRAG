@@ -9,6 +9,7 @@ import json
 import pytest
 from sqlalchemy import delete, text
 
+from app.cache import cache_delete_prefix, search_cache_prefix
 from app.db import engine, get_session
 from app.models import Document
 from app.rag import ingest as ingest_module
@@ -68,6 +69,7 @@ def cleanup() -> None:
     yield
     with get_session() as session:
         session.execute(delete(Document).where(Document.source.like("test://%")))
+    cache_delete_prefix(search_cache_prefix())  # 清理缓存，避免集成测试间读到旧结果
 
 
 def test_ingest_then_search(

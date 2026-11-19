@@ -21,6 +21,7 @@ ToolRAG/
 │   ├── db.py              # SQLAlchemy Engine / Session
 │   ├── models.py          # ORM 模型（documents 表 + vector 列）
 │   ├── schema.py          # 建表 / 建索引 / 启用 vector 扩展
+│   ├── cache.py           # Redis 缓存层（检索结果缓存与失效，M6）
 │   ├── api/
 │   │   ├── routes.py      # 路由
 │   │   └── schemas.py     # 请求 / 响应模型
@@ -29,7 +30,7 @@ ToolRAG/
 │       ├── embeddings.py  # Embedding 客户端
 │       ├── tokenizer.py   # 中文二元切分（bigram）
 │       ├── ingest.py      # 文档入库（含 content_tsv）
-│       ├── retriever.py   # 向量 / 关键词 / 混合检索
+│       ├── retriever.py   # 向量 / 关键词 / 混合检索（含缓存入口）
 │       └── fusion.py      # RRF 与加权融合排序
 │   ├── agent/             # Function Calling Agent
 │   │   ├── llm.py         # 对话模型客户端
@@ -136,6 +137,7 @@ curl -X POST http://localhost:8000/api/search \
   "query": "哪些水果富含钾？",
   "mode": "hybrid",
   "fusion": "rrf",
+  "cached": false,
   "hits": [
     {
       "id": 2,
@@ -153,6 +155,7 @@ curl -X POST http://localhost:8000/api/search \
 
 > `score` 的含义随模式变化：`vector` 为余弦相似度（越接近 1 越相关）；`keyword` 为 `ts_rank`；
 > `hybrid` 下 `rrf` 为 RRF 累加分（量级很小，仅用于排序），`weighted` 为归一化加权分（0~1）。
+> `cached` 表示本次是否命中 Redis 检索缓存（M6）。
 
 ### 中文关键词检索原理
 
@@ -203,6 +206,26 @@ curl -X POST http://localhost:8000/api/chat \
   `fallback=true` 且 `error` 给出具体原因，便于排查。
 - `rounds`：实际工具调用轮数；若达到上限仍未给出结论，`answer` 会显式说明。
 
+## 缓存与检索优化（M6）
+
+- **检索结果缓存**：`/api/search` 与工具 `search_documents` 统一走带缓存的 `search_cached()`，
+  缓存键为 `CACHE_KEY_PREFIX:search:{mode}:{top_k}:{fusion}:{alpha}:{query}`，命中则直接返回
+  （响应里 `cached=true`）。TTL 由 `CACHE_TTL` 控制（默认 300s）。
+- **缓存失效**：文档入库（`ingest_text`）后按前缀删除全部检索缓存，避免读到旧数据。
+- **失败兜底**：Redis 不可用时**静默降级**——读返回未命中、写忽略，检索本身照常工作；
+  连续失败后有 30s 冷却，避免每次请求都卡在连接超时。可用 `CACHE_ENABLED=false` 彻底关闭。
+- **并行召回**：混合检索的向量路（含 Embedding 网络请求）与关键词路（DB 查询）互不依赖，
+  改用线程池并行执行，缩短混合检索延迟。
+
+相关配置（`.env`）：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `CACHE_ENABLED` | `true` | 是否启用检索缓存 |
+| `CACHE_TTL` | `300` | 缓存有效期（秒） |
+| `CACHE_TIMEOUT` | `0.5` | Redis 连接 / 读写超时（秒） |
+| `CACHE_KEY_PREFIX` | `toolrag` | 缓存键前缀 |
+
 ## 代码检查与测试
 
 ```bash
@@ -241,5 +264,5 @@ Agent 答案准确率 1.00、引用正确率 1.00、兜底率 0.00、平均问�
 | M3 | Function Calling 多工具路由 | ✅ |
 | M4 | 引用溯源 / 失败兜底 / Token Trace | ✅ |
 | M5 | 评测：评测集、评测脚本与报告 | ✅ |
-| M6 | Redis 缓存与检索优化 | ⬜ |
+| M6 | Redis 缓存与检索优化 | ✅ |
 | M7 | Docker 镜像与部署文档 | ⬜ |

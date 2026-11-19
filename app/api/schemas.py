@@ -55,6 +55,7 @@ class SearchResponse(BaseModel):
     query: str
     mode: str = Field(..., description="实际使用的检索模式")
     fusion: str | None = Field(default=None, description="混合检索实际使用的融合策略")
+    cached: bool = Field(default=False, description="是否命中检索缓存（M6）")
     hits: list[SearchHit]
 
 

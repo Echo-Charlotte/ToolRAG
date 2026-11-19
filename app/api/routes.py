@@ -17,7 +17,7 @@ from app.api.schemas import (
 )
 from app.config import settings
 from app.rag.ingest import ingest_text
-from app.rag.retriever import search as run_search
+from app.rag.retriever import search_cached as run_search_cached
 
 router = APIRouter()
 
@@ -41,10 +41,10 @@ def create_document(req: IngestRequest) -> IngestResponse:
 
 @router.post("/search", response_model=SearchResponse, summary="检索（向量 / 关键词 / 混合）")
 def search(req: SearchRequest) -> SearchResponse:
-    """按 mode 选择检索方式，默认走配置 search_mode（默认 hybrid）。"""
+    """按 mode 选择检索方式，默认走配置 search_mode（默认 hybrid）；结果命中缓存时直接返回。"""
     mode = req.mode or settings.search_mode
     try:
-        raw_hits = run_search(req.query, req.top_k, mode, req.fusion, req.alpha)
+        raw_hits, cached = run_search_cached(req.query, req.top_k, mode, req.fusion, req.alpha)
     except ValueError as exc:  # 非法 mode
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -54,6 +54,7 @@ def search(req: SearchRequest) -> SearchResponse:
         query=req.query,
         mode=mode,
         fusion=fusion,
+        cached=cached,
         hits=[SearchHit(**hit) for hit in raw_hits],
     )
 

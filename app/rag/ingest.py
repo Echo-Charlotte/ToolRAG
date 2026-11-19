@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy import delete, func
 
+from app.cache import cache_delete_prefix, search_cache_prefix
 from app.config import settings
 from app.db import get_session
 from app.models import Document
@@ -49,4 +50,6 @@ def ingest_text(source: str, text: str, metadata: dict[str, Any] | None = None) 
                 for index, (chunk, vector) in enumerate(zip(chunks, vectors))
             ]
         )
+    # 数据已变更，检索缓存全部失效（失败兜底：Redis 异常时静默忽略）
+    cache_delete_prefix(search_cache_prefix())
     return len(chunks)

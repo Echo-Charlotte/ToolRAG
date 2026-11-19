@@ -22,7 +22,8 @@ def test_search_endpoint_shape(monkeypatch: pytest.MonkeyPatch) -> None:
         }
     ]
     monkeypatch.setattr(
-        "app.api.routes.run_search", lambda query, top_k, mode, fusion, alpha: fake_hits
+        "app.api.routes.run_search_cached",
+        lambda query, top_k, mode, fusion, alpha: (fake_hits, False),
     )
 
     resp = client.post("/api/search", json={"query": "苹果", "top_k": 1, "mode": "vector"})
@@ -31,6 +32,7 @@ def test_search_endpoint_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     body = resp.json()
     assert body["query"] == "苹果"
     assert body["mode"] == "vector"
+    assert body["cached"] is False
     assert body["hits"][0]["source"] == "doc.md"
     assert body["hits"][0]["score"] == 0.87
 
@@ -49,7 +51,8 @@ def test_search_hybrid_returns_fusion(monkeypatch: pytest.MonkeyPatch) -> None:
         }
     ]
     monkeypatch.setattr(
-        "app.api.routes.run_search", lambda query, top_k, mode, fusion, alpha: fake_hits
+        "app.api.routes.run_search_cached",
+        lambda query, top_k, mode, fusion, alpha: (fake_hits, True),
     )
 
     resp = client.post(
@@ -60,6 +63,7 @@ def test_search_hybrid_returns_fusion(monkeypatch: pytest.MonkeyPatch) -> None:
     body = resp.json()
     assert body["mode"] == "hybrid"
     assert body["fusion"] == "weighted"
+    assert body["cached"] is True
     assert body["hits"][0]["vector_score"] == 0.8
     assert body["hits"][0]["keyword_score"] == 0.2
 
@@ -68,7 +72,7 @@ def test_search_rejects_invalid_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     def _raise(query: str, top_k: int | None, mode: str, fusion: str | None, alpha: float | None):
         raise ValueError(f"未知检索模式: {mode}")
 
-    monkeypatch.setattr("app.api.routes.run_search", _raise)
+    monkeypatch.setattr("app.api.routes.run_search_cached", _raise)
 
     resp = client.post("/api/search", json={"query": "苹果", "mode": "bogus"})
 
