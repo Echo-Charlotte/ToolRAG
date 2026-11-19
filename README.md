@@ -47,7 +47,9 @@ ToolRAG/
 │   └── evaluate.py        # 评测入口（M5）
 ├── tests/                 # 测试
 ├── .github/workflows/     # CI
-├── docker-compose.yml     # PGVector + Redis
+├── Dockerfile             # 应用镜像（非 root 用户 + 健康检查）
+├── docker-compose.yml     # PGVector + Redis（app 走 --profile full 部署）
+├── .dockerignore
 └── .env.example           # 环境变量模板
 ```
 
@@ -254,6 +256,36 @@ PYTHONPATH=. python scripts/evaluate.py --skip-agent  # 只跑检索指标（不
 Recall@5 = 1.00、Hit@5 = 1.00、MRR = 1.00、平均检索延迟约 153 ms；
 Agent 答案准确率 1.00、引用正确率 1.00、兜底率 0.00、平均问答延迟约 5.2 s。
 
+## 部署（M7）
+
+### 方式一：一键起全栈（应用 + 依赖，推荐）
+
+```bash
+# 先准备好 .env（至少填 EMBEDDING_API_KEY）
+docker compose --profile full up -d --build
+docker compose logs -f app        # 观察启动日志
+```
+
+- 应用镜像基于 `python:3.12-slim`，依赖层与源码层分离（改代码不会重装依赖）；
+  容器以非 root 用户 `appuser` 运行，并内置 `/api/health` 健康检查。
+- `app` 服务仅在 `--profile full` 下启动，容器内 `POSTGRES_HOST=postgres`、`REDIS_HOST=redis`
+  自动指向同网络的依赖服务；模型 Key 通过项目根目录的 `.env` 注入（`.env` 已被 `.dockerignore` 排除，不会打进镜像）。
+- 启动后访问 http://localhost:8000/docs 。
+
+```bash
+docker compose --profile full ps       # 查看状态（含 healthy）
+docker compose --profile full down     # 停止（数据卷保留）
+```
+
+### 方式二：仅起依赖，应用本地跑（开发）
+
+```bash
+docker compose up -d          # 只启动 postgres + redis
+uvicorn app.main:app --reload # 本地运行应用
+```
+
+> 若未启动 Redis，检索缓存会自动降级（`cached` 恒为 false），不影响功能。
+
 ## 里程碑
 
 | 阶段 | 内容 | 状态 |
@@ -265,4 +297,4 @@ Agent 答案准确率 1.00、引用正确率 1.00、兜底率 0.00、平均问�
 | M4 | 引用溯源 / 失败兜底 / Token Trace | ✅ |
 | M5 | 评测：评测集、评测脚本与报告 | ✅ |
 | M6 | Redis 缓存与检索优化 | ✅ |
-| M7 | Docker 镜像与部署文档 | ⬜ |
+| M7 | Docker 镜像与部署文档 | ✅ |

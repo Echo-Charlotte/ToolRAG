@@ -1,0 +1,24 @@
+# 版本控制 / 本地环境
+.git
+.gitignore
+.gitattributes
+.venv
+venv
+
+# Python 缓存
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# 密钥（绝不进镜像）
+.env
+
+# 编辑器 / IDE
+.idea
+.vscode
+
+# 测试与评测产物
+eval/report.md
