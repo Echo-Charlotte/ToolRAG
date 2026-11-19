@@ -2,12 +2,16 @@
 
 from fastapi import APIRouter, HTTPException
 
+from app.agent.tool_agent import run_agent
 from app.api.schemas import (
+    ChatRequest,
+    ChatResponse,
     IngestRequest,
     IngestResponse,
     SearchHit,
     SearchRequest,
     SearchResponse,
+    ToolCallTrace,
 )
 from app.config import settings
 from app.rag.ingest import ingest_text
@@ -49,4 +53,19 @@ def search(req: SearchRequest) -> SearchResponse:
         mode=mode,
         fusion=fusion,
         hits=[SearchHit(**hit) for hit in raw_hits],
+    )
+
+
+@router.post("/chat", response_model=ChatResponse, summary="工具调用问答（Function Calling）")
+def chat(req: ChatRequest) -> ChatResponse:
+    """让 LLM 自主决定是否调用工具（检索 / 列来源 / 读全文）并作答。"""
+    history = [msg.model_dump() for msg in req.history]
+    try:
+        result = run_agent(req.message, history)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"问答失败: {exc}") from exc
+    return ChatResponse(
+        answer=result.answer,
+        tool_calls=[ToolCallTrace(**call) for call in result.tool_calls],
+        rounds=result.rounds,
     )

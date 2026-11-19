@@ -56,3 +56,33 @@ class SearchResponse(BaseModel):
     mode: str = Field(..., description="实际使用的检索模式")
     fusion: str | None = Field(default=None, description="混合检索实际使用的融合策略")
     hits: list[SearchHit]
+
+
+class ChatMessage(BaseModel):
+    """一条历史消息。"""
+
+    role: str = Field(..., description="角色：user / assistant")
+    content: str
+
+
+class ChatRequest(BaseModel):
+    """问答请求。"""
+
+    message: str = Field(..., min_length=1, description="用户问题")
+    history: list[ChatMessage] = Field(default_factory=list, description="历史对话，可为空")
+
+
+class ToolCallTrace(BaseModel):
+    """一次工具调用的轨迹。"""
+
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    result: Any = Field(default=None, description="工具返回结果")
+
+
+class ChatResponse(BaseModel):
+    """问答响应。"""
+
+    answer: str
+    tool_calls: list[ToolCallTrace] = Field(default_factory=list)
+    rounds: int = Field(..., description="实际工具调用轮数")

@@ -1,5 +1,7 @@
 """API 接口测试：用假向量替换真实 embedding，避免依赖外部服务与数据库。"""
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -88,3 +90,31 @@ def test_documents_endpoint_shape(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert resp.status_code == 200
     assert resp.json() == {"source": "a.txt", "chunks": 3}
+
+
+def test_chat_endpoint_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_result = SimpleNamespace(
+        answer="苹果是一种水果。",
+        tool_calls=[
+            {
+                "name": "search_documents",
+                "arguments": {"query": "苹果"},
+                "result": {"results": []},
+            }
+        ],
+        rounds=2,
+    )
+    monkeypatch.setattr("app.api.routes.run_agent", lambda message, history: fake_result)
+
+    resp = client.post("/api/chat", json={"message": "苹果是什么？"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["answer"] == "苹果是一种水果。"
+    assert body["rounds"] == 2
+    assert body["tool_calls"][0]["name"] == "search_documents"
+
+
+def test_chat_rejects_empty_message() -> None:
+    resp = client.post("/api/chat", json={"message": ""})
+    assert resp.status_code == 422

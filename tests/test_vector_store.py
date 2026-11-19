@@ -4,6 +4,8 @@
 embedding 用确定性伪向量替换，测试只验证「切分 → 存储 → 向量检索」链路。
 """
 
+import json
+
 import pytest
 from sqlalchemy import delete, text
 
@@ -11,6 +13,7 @@ from app.db import engine, get_session
 from app.models import Document
 from app.rag import ingest as ingest_module
 from app.rag import retriever as retriever_module
+from app.tools.registry import execute_tool
 
 
 def _db_available() -> bool:
@@ -129,3 +132,21 @@ def test_search_dispatch_invalid_mode_raises(
 ) -> None:
     with pytest.raises(ValueError):
         retriever_module.search("苹果", mode="bogus")
+
+
+def test_tools_end_to_end(
+    fake_embedding: _FakeEmbeddingClient, prepared_db: None, cleanup: None
+) -> None:
+    source = "test://tools"
+    ingest_module.ingest_text(source, "苹果是一种水果。香蕉也是水果。", {"title": "水果"})
+
+    search_result = execute_tool("search_documents", json.dumps({"query": "苹果", "top_k": 3}))
+    assert search_result["results"]
+    assert search_result["results"][0]["source"] == source
+
+    sources = execute_tool("list_sources", "{}")
+    assert any(item["source"] == source for item in sources["sources"])
+
+    content = execute_tool("get_document_content", json.dumps({"source": source}))
+    assert content["found"] is True
+    assert content["chunks"]

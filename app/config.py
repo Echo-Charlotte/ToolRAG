@@ -19,10 +19,10 @@ class Settings(BaseSettings):
     app_port: int = 8000
     log_level: str = "INFO"
 
-    # LLM（对话模型，M3 使用）
-    openai_api_key: str = ""
-    openai_base_url: str = "https://api.openai.com/v1"
-    chat_model: str = "gpt-4o-mini"
+    # LLM（对话模型，M3 使用；默认硅基流动，OpenAI 兼容接口，支持 Function Calling）
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.siliconflow.cn/v1"
+    llm_model: str = "Qwen/Qwen2.5-7B-Instruct"
 
     # Embedding（默认硅基流动，OpenAI 兼容接口）
     embedding_api_key: str = ""
@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     hybrid_alpha: float = 0.5  # 加权融合中向量分的权重
     candidate_multiplier: int = 4  # 混合检索时各路召回的候选池倍数
 
+    # Agent（M3）
+    agent_max_rounds: int = 5  # 工具调用最大轮数
+    agent_temperature: float = 0.0
+
     # PostgreSQL + PGVector
     postgres_host: str = "localhost"
     postgres_port: int = 5432
@@ -54,6 +58,11 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0
+
+    @property
+    def effective_llm_api_key(self) -> str:
+        """对话模型 API Key；未单独配置时复用 embedding 的 Key（同一硅基流动账号）。"""
+        return self.llm_api_key or self.embedding_api_key
 
     @property
     def database_url(self) -> str:
