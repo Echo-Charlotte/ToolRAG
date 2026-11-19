@@ -6,11 +6,13 @@ from app.agent.tool_agent import run_agent
 from app.api.schemas import (
     ChatRequest,
     ChatResponse,
+    Citation,
     IngestRequest,
     IngestResponse,
     SearchHit,
     SearchRequest,
     SearchResponse,
+    TokenUsage,
     ToolCallTrace,
 )
 from app.config import settings
@@ -58,14 +60,21 @@ def search(req: SearchRequest) -> SearchResponse:
 
 @router.post("/chat", response_model=ChatResponse, summary="工具调用问答（Function Calling）")
 def chat(req: ChatRequest) -> ChatResponse:
-    """让 LLM 自主决定是否调用工具（检索 / 列来源 / 读全文）并作答。"""
+    """让 LLM 自主决定是否调用工具（检索 / 列来源 / 读全文）并作答。
+
+    返回回答、工具调用轨迹、引用来源与 Token 用量；模型不可用时返回兜底回答（不 5xx）。
+    """
     history = [msg.model_dump() for msg in req.history]
     try:
         result = run_agent(req.message, history)
-    except Exception as exc:
+    except Exception as exc:  # 最后一道防线：非模型调用异常（如内部 bug）仍转为 502
         raise HTTPException(status_code=502, detail=f"问答失败: {exc}") from exc
     return ChatResponse(
         answer=result.answer,
         tool_calls=[ToolCallTrace(**call) for call in result.tool_calls],
+        citations=[Citation(**citation) for citation in result.citations],
+        usage=TokenUsage(**result.usage.as_dict()),
         rounds=result.rounds,
+        fallback=result.fallback,
+        error=result.error,
     )

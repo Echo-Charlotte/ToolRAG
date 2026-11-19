@@ -109,3 +109,69 @@ def test_agent_handles_multiple_tools_in_one_round(patched_tool: list) -> None:
 
     assert [call["name"] for call in result.tool_calls] == ["search_documents", "list_sources"]
     assert result.rounds == 2
+
+
+def test_agent_accumulates_token_usage(patched_tool: list) -> None:
+    script = [
+        _response(tool_calls=[_tool_call("c1", "search_documents", json.dumps({"query": "苹果"}))]),
+        _response(content="完成"),
+    ]
+    client = _FakeClient(script)
+
+    result = tool_agent.run_agent("苹果", client=client)
+
+    # 假客户端每轮 usage：prompt=1 / completion=1 / total=2，共两轮
+    assert result.usage.prompt_tokens == 2
+    assert result.usage.completion_tokens == 2
+    assert result.usage.total_tokens == 4
+
+
+def test_agent_extracts_citations_from_search(patched_tool: list) -> None:
+    script = [
+        _response(tool_calls=[_tool_call("c1", "search_documents", json.dumps({"query": "苹果"}))]),
+        _response(content="完成"),
+    ]
+    client = _FakeClient(script)
+
+    result = tool_agent.run_agent("苹果", client=client)
+
+    assert result.citations == [
+        {"source": "fruits.md", "chunk_index": 0, "snippet": "苹果是水果。"}
+    ]
+    assert result.fallback is False
+
+
+def test_agent_falls_back_when_model_raises() -> None:
+    class _BoomCompletions:
+        def create(self, **kwargs: Any) -> Any:
+            raise RuntimeError("network down")
+
+    boom_client = SimpleNamespace(chat=SimpleNamespace(completions=_BoomCompletions()))
+
+    result = tool_agent.run_agent("你好", client=boom_client)
+
+    assert result.fallback is True
+    assert result.answer == tool_agent.FALLBACK_ANSWER
+    assert result.rounds == 1
+    assert result.error is not None and "RuntimeError" in result.error
+
+
+def test_citations_filtered_by_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_execute(name: str, arguments: Any) -> dict[str, Any]:
+        return {
+            "results": [
+                {"source": "a.md", "chunk_index": 0, "content": "A 的内容"},
+                {"source": "b.md", "chunk_index": 1, "content": "B 的内容"},
+            ]
+        }
+
+    monkeypatch.setattr(tool_agent, "execute_tool", fake_execute)
+    script = [
+        _response(tool_calls=[_tool_call("c1", "search_documents", json.dumps({"query": "x"}))]),
+        _response(content="根据 a.md 的内容……"),
+    ]
+
+    result = tool_agent.run_agent("x", client=_FakeClient(script))
+
+    # 回答只提到 a.md，引用溯源应只保留 a.md
+    assert [cit["source"] for cit in result.citations] == ["a.md"]

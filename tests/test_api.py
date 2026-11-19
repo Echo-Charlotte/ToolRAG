@@ -102,7 +102,13 @@ def test_chat_endpoint_shape(monkeypatch: pytest.MonkeyPatch) -> None:
                 "result": {"results": []},
             }
         ],
+        citations=[{"source": "fruits.md", "chunk_index": 0, "snippet": "苹果是水果。"}],
+        usage=SimpleNamespace(
+            as_dict=lambda: {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
+        ),
         rounds=2,
+        fallback=False,
+        error=None,
     )
     monkeypatch.setattr("app.api.routes.run_agent", lambda message, history: fake_result)
 
@@ -113,6 +119,9 @@ def test_chat_endpoint_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     assert body["answer"] == "苹果是一种水果。"
     assert body["rounds"] == 2
     assert body["tool_calls"][0]["name"] == "search_documents"
+    assert body["citations"][0]["source"] == "fruits.md"
+    assert body["usage"]["total_tokens"] == 5
+    assert body["fallback"] is False
 
 
 def test_chat_rejects_empty_message() -> None:

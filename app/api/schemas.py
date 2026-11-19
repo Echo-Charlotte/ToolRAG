@@ -80,9 +80,29 @@ class ToolCallTrace(BaseModel):
     result: Any = Field(default=None, description="工具返回结果")
 
 
+class Citation(BaseModel):
+    """引用来源（回答所依据的文档片段）。"""
+
+    source: str = Field(..., description="文档来源标识")
+    chunk_index: int | None = Field(default=None, description="命中的切块序号")
+    snippet: str = Field(default="", description="片段摘要")
+
+
+class TokenUsage(BaseModel):
+    """对话累计 Token 用量。"""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
 class ChatResponse(BaseModel):
     """问答响应。"""
 
     answer: str
     tool_calls: list[ToolCallTrace] = Field(default_factory=list)
+    citations: list[Citation] = Field(default_factory=list, description="去重后的引用来源")
+    usage: TokenUsage = Field(default_factory=TokenUsage, description="累计 Token 用量")
     rounds: int = Field(..., description="实际工具调用轮数")
+    fallback: bool = Field(default=False, description="是否为失败兜底回答")
+    error: str | None = Field(default=None, description="兜底时的错误原因")

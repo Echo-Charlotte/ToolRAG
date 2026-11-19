@@ -154,7 +154,7 @@ PostgreSQL 内置全文检索按空格切词，中文没有空格会被整句当
 再经 `to_tsvector('simple', ...)` 建索引（GIN）；查询同理切成 bigram 后用 `|` 拼成 OR 的 tsquery，
 避免 AND 造成的零召回。
 
-### 问答（Function Calling，M3）
+### 问答（Function Calling，M3 / M4）
 
 `/api/chat` 会把三个工具（`search_documents` / `list_sources` / `get_document_content`）的
 schema 一并发给对话模型，由模型自主决定调用哪个工具、调用几次，工具结果以 `tool` 角色回填后
@@ -178,11 +178,22 @@ curl -X POST http://localhost:8000/api/chat \
       "result": {"query": "数据库查询变慢 优化", "mode": "hybrid", "results": []}
     }
   ],
-  "rounds": 2
+  "citations": [
+    {"source": "db.md", "chunk_index": 0, "snippet": "当数据量变大时，全表扫描会变得非常慢。"}
+  ],
+  "usage": {"prompt_tokens": 1587, "completion_tokens": 392, "total_tokens": 1979},
+  "rounds": 2,
+  "fallback": false,
+  "error": null
 }
 ```
 
 - `tool_calls`：本轮问答的工具调用轨迹（含参数与返回结果），便于观察模型的路由决策。
+- `citations`（M4 引用溯源）：回答实际依据的来源，从工具结果中抽取并按 `(source, chunk_index)`
+  去重；优先只保留回答正文里提到的来源，若正文未显式提到任何来源则退回返回全部已检索来源。
+- `usage`（M4 Token Trace）：各轮 `prompt / completion / total` tokens 的累计值。
+- `fallback`（M4 失败兜底）：模型调用异常（网络、鉴权等）时不会返回 5xx，而是返回可读的兜底回答，
+  `fallback=true` 且 `error` 给出具体原因，便于排查。
 - `rounds`：实际工具调用轮数；若达到上限仍未给出结论，`answer` 会显式说明。
 
 ## 代码检查与测试
@@ -202,5 +213,5 @@ pytest -q
 | M1 | 向量检索：切分、Embedding、PGVector 存储与检索 | ✅ |
 | M2 | 关键词检索 + 混合检索 | ✅ |
 | M3 | Function Calling 多工具路由 | ✅ |
-| M4 | 引用溯源 / 失败兜底 / Token Trace | ⬜ |
+| M4 | 引用溯源 / 失败兜底 / Token Trace | ✅ |
 | M5 | 评测与优化 | ⬜ |
